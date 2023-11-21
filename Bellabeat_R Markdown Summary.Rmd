@@ -1,0 +1,342 @@
+---
+title: "Bellabeat Data Analysis"
+author: "Ana Visanu"
+date: "2023-11-20"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Business task
+
+Review smart device usage data for selecting trends that could be applied to Bellabeat customers to generate sales growth.
+
+## A description of all data sources used 
+
+Data is stored on CC0: Public Domain (Kaggle – an online platform of data scientists and machine learning engineers). Folder contains 18 files, out of which 15 files are organized in a long format and 3 are organized in wide format.
+
+Please note the following data issues/limitations: 
+
+* Though this is data is public and the provider states that survey participants agreed on sharing their data, the fact that this is a third-party source raises doubts referring to reliability of data. It would be highly recommended to use alternative data (preferably collected directly by Bellabeat or bought from Amazon Mechanical Turk). 
+
+* Data contains information referring to only 33 users for a 30-day period. Considering such a limited sample, it might not be sufficient for ensuring an appropriate margin of error, meaning that the conclusions may not be representative for all the smart tracker users.
+
+* Based on data description, it is not specified that information was randomly selected, meaning that this source may be subject to bias.
+
+* Using this data may lead to some licencing and privacy issues. Based on Kaggle terms of use (https://www.kaggle.com/terms), one could use Kaggle data for his/her own internal, personal, non-commercial use, and not on behalf of or for the benefit of any third party. If Bellabeat has its own Kaggle account and will not share the data with any third-party, no issues arise. However, if the analyst is required to use own account for downloading the dataset, it raises issues regarding distribution of the dataset to other parties. To prevent these issues, Bellabeat should create it s account on Kaggle or write to Kaggle to receive approval for data usage. Further investigation of data source leads to another website (https://zenodo.org/records/53894#.X9oeh3Uzaao) as provenience. Probably, Bellabeat would need to contact zenovo.org as well in order to avoid any legal issues.
+
+## Documentation of cleaning/manipulation of data 
+
+Based on initial data assessment, it was noted that different files contain similar data. For instance, file "dailyActivity_merged" contains all the information provided in files "dailyCalories_merged", "dailyIntensities_merged" and "dailySteps_merged". Also, same information about total steps is available per hour-basis, per daily-basis, as well as in wide and long format. Additionally, data on sleep patterns and weight tracking is available only for a portion from 33 users. If in case of sleep data, they are at least available for around 72% of users (24 out of 33 users), than in case of weight data, it is available for around 24% (8 of 33 users). Based on that, the weight data was not included in analysis.
+
+In order to avoid any duplicated or irrelevant information, the following files were considered for analysis:
+* “dailyActivity_merged” file;
+*	“sleepDay_merged” file;
+*	“heartrate_seconds_merged” file.
+
+### a) "dailyActivity_merged" file
+
+The needed packages were loaded:
+```{r library}
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+```
+
+Afterwards, the needed file was imported in R for further assessment.
+```{r}
+daily_activity_df <- read_csv("Bellabeat/dailyActivity_merged.csv")
+View(daily_activity_df)
+```
+
+Structure of data was checked.
+```{r}
+glimpse(daily_activity_df)
+head(daily_activity_df)
+str(daily_activity_df)
+```
+
+Considering that "ActivityDate" column is of character type, changed format of this column  from character to date. Additionally, inserted a new column with the weekday (1 for Monday to 7 for Sunday).
+```{r}
+daily_activity_df <- daily_activity_df %>% 
+  mutate(date_adjusted = mdy(ActivityDate)) %>% 
+  mutate(week_day=wday(date_adjusted-1))
+View(daily_activity_df)
+```
+
+Filtered and sorted data. Noticed that when total steps were null, calories were still counted. As these values are not related to any users' activities, further assessment will disregard calories where total steps are null.
+```{r}
+filtered_df <- filter(daily_activity_df,TotalSteps ==0)
+arrange(filtered_df,Calories,by_group=FALSE)
+View(filtered_df)
+```
+
+### b) "heartrate_seconds_merged" file
+
+The needed file was imported in R for further assessment.
+```{r}
+heartrate_df <- read_csv("Bellabeat/heartrate_seconds_merged.csv")
+View(heartrate_df)
+```
+
+Structure of data was checked.
+```{r}
+glimpse(heartrate_df)
+head(heartrate_df)
+str(heartrate_df)
+```
+
+Column "Time" was split into date and time
+```{r}
+heartrate_df <- heartrate_df %>% 
+  separate(Time, into = c("Date","Hour"), sep = " ")
+View(heartrate_df)
+```
+
+The format of column containing date of activity (column "Date") from character to date type.
+```{r}
+heartrate_df <- heartrate_df %>% 
+  mutate(Date = mdy(Date))
+View(heartrate_df)
+```
+
+### c) "sleepDay_merged" file
+
+The needed file was imported in R for further assessment.
+```{r}
+sleep_df <- read_csv("Bellabeat/sleepDay_merged.csv")
+View(sleep_df)
+```
+
+Structure of data was checked.
+```{r}
+glimpse(sleep_df)
+head(sleep_df)
+str(sleep_df)
+```
+
+Column "Time" was split into date and time
+```{r}
+sleep_df <- sleep_df %>% 
+  separate(SleepDay, into = c("Date_sleep","Hour"), sep = " ")
+View(sleep_df)
+```
+
+The format of column containing date of activity (column "Date") from character to date type.
+```{r}
+sleep_df <- sleep_df %>% 
+  mutate(Date_sleep = mdy(Date_sleep))
+View(sleep_df)
+```
+
+
+## Summary of Analysis with supporting visualizations and key findings 
+
+### a) "dailyActivity_merged" file
+
+Types of activities (very active, active, light active and sedentary) were summarized by weekday.
+```{r}
+activity_type_by_weekday <- daily_activity_df %>%
+  filter(TotalSteps !=0) %>% 
+  group_by(week_day) %>% 
+  summarize(very_active=mean(VeryActiveDistance),active=mean(ModeratelyActiveDistance),
+            light_active=mean(LightActiveDistance),sedentary=mean(SedentaryActiveDistance)) %>% 
+  bind_rows(summarise(., across(where(is.numeric) &!week_day, mean))) 
+View(activity_type_by_weekday)
+```
+
+Afterwards, activity levels by weekday were plotted in the following chart:
+
+```{r, echo=FALSE}
+ggplot(activity_type_by_weekday)+
+  geom_line(aes(x = week_day,  y = very_active, color="very active"))+
+  geom_line(aes(x = week_day,  y = active, color="active"))+
+  geom_line(aes(x = week_day,  y = light_active, color="light"))+
+  geom_line(aes(x = week_day,  y = sedentary, color="sedentary"))+
+  ggtitle("Average level of activity by weekday")+
+  scale_color_manual(name = "Activity level", values = c("very active" = "green", "active" = "orange", "light"="black","sedentary"="red"))+
+  labs(y = "Distance", x = "Day of the week")
+```
+
+**Based on analysis of activity levels performed by users, consumers can be split into 4 categories: very active, active, light active and sedentary. Considering different level of involvement and involvement in wellness, each type of users requires specific marketing strategies. Also, it is noticed that the majority of users perform a light activity level. Second most popular pattern is the very active movement. However, it is around two times less frequent than light activity level. Considering their frequency, consumer categories "very active" and "light active" are to be prioritized.**
+
+Afterwards, average daily steps were summarized by weekday.
+```{r}
+activity_by_weekday <- daily_activity_df %>%
+  filter(TotalSteps !=0) %>% 
+  group_by(week_day) %>% 
+  summarize(avrg_steps=mean(TotalSteps))
+View(activity_by_weekday) 
+```
+
+Average daily steps were plotted in the following chart:
+
+```{r,echo=FALSE}
+ggplot(data = activity_by_weekday) +
+  geom_point(mapping = aes(x = week_day, y = avrg_steps))+
+  labs(title = "Average daily steps by weekday", subtitle = "Based on users aggregated data")
+```
+
+We also summarized average distance by weekday.
+```{r}
+distance_by_weekday <- daily_activity_df %>% 
+  filter(TotalSteps !=0) %>% 
+  group_by(week_day) %>% 
+  summarize(avrg_distance=mean(TotalDistance)*1000)
+View(distance_by_weekday)
+```
+
+Average daily distance were plotted in the following chart:
+
+```{r,echo=FALSE}
+ggplot(data = distance_by_weekday) +
+  geom_point(mapping = aes(x = week_day, y = avrg_distance))+
+  labs(title = "Average distance by weekday", subtitle = "Based on users aggregated data")
+```
+
+We summarized average calories by weekday.
+```{r}
+calories_by_weekday <- daily_activity_df %>% 
+  filter(TotalSteps !=0) %>% 
+  group_by(week_day) %>% 
+  summarize(avrg_calories=mean(Calories))
+View(calories_by_weekday)
+```
+
+Average daily calories were plotted in the following chart:
+
+```{r,echo=FALSE}
+ggplot(data = calories_by_weekday) +
+  geom_point(mapping = aes(x = week_day, y = avrg_calories))+
+  labs(title = "Average calories by weekday", subtitle = "Based on users aggregated data")
+```
+
+**Based on assessment of weekly changes of total steps, distance and calories, we can notice that the highest users' level of activity occurs on Tuesday and Saturday. On the other hand, the lowest level of activity is noted on Thursday and Sunday. Marketing materials sent on Tuesday and Saturday might be more appealing.**
+
+When plotting daily steps and distance, it could be noticed that both variables have a very strong positive correlation.
+```{r,echo=FALSE}
+df_1 <- merge(activity_by_weekday, distance_by_weekday, by = 'week_day')
+ggplot(df_1) +
+  geom_line(aes(x=avrg_steps, y=avrg_distance, color="Trend Line"))+
+  ggtitle("Relationship between average steps and distance")+
+  scale_color_manual(name = "Metric", values = c("Trend Line" = "darkblue"))+
+  labs(y = "Distance", x = "Steps")
+```
+
+**However, when plotting daily steps and calories, it could be noticed that there is no continuous pattern of relationship between total steps and calories. For number of steps higher than 8500, both calories and total steps tend to positively correlate.**
+
+```{r,echo=FALSE}
+df_2 <- merge(activity_by_weekday, calories_by_weekday, by = 'week_day')
+ggplot(df_2) +
+  geom_line(aes(x=avrg_steps, y=avrg_calories, color="Trend Line"))+
+  ggtitle("Relationship between average steps and calories")+
+  scale_color_manual(name = "Metric", values = c("Trend Line" = "purple"))+
+  labs(y = "Calories", x = "Steps")
+```
+
+
+## Summary of Analysis with supporting visualizations and key findings
+
+### b) "heartrate_seconds_merged" file
+
+Heartbeat data was summarized as average, minimal and maximum level per user
+```{r}
+summary_heartrate <- heartrate_df %>%
+  group_by(Id) %>% 
+  summarize(average=mean(Value),max=max(Value),
+            min=min(Value))
+View(summary_heartrate)
+```
+
+**It could be noticed that there are cases when user's heart rates have extreme values. Presumably, extreme high values occur in times of intense activity level, while extremely low values occur during sleep.**
+
+We summarized types of activity (per df "activity_type_by_id") by Id
+```{r}
+activity_type_by_id <- daily_activity_df %>%
+  filter(TotalSteps !=0) %>% 
+  group_by(Id) %>% 
+  summarize(very_active=mean(VeryActiveDistance),active=mean(ModeratelyActiveDistance),
+            light_active=mean(LightActiveDistance),sedentary=mean(SedentaryActiveDistance)) %>% 
+  bind_rows(summarise(., across(where(is.numeric), mean))) 
+View(activity_type_by_id)
+```
+
+Combined information about heart rate and types of activity by Id under a single data frame
+```{r}
+summary_max <- summary_heartrate %>% inner_join(activity_type_by_id, 
+                              by="Id")
+View(summary_max)
+```
+
+Computed share of active movements (very active and active) in total daily activity
+```{r}
+summary_max <- summary_max %>% 
+    mutate(weight_of_activity = (very_active+active)/(very_active+active+ light_active+sedentary)*100)
+View(summary_max)
+```
+
+We plotted max pulse and most active minutes per day
+```{r,echo=FALSE}
+ggplot(data = summary_max)+
+  geom_smooth(mapping = aes(x = weight_of_activity, y = max))+
+  ggtitle("Relationship between maximum pulse levels and weight of most active distances")+
+  labs(y = "bpm", x = "Percent")
+```
+
+**The relationship between maximal pulse and most active minutes per day is not linear. Increase in number of active minutes per day from 0 to 20 minutes per day leads to a positive increase in heart rate. However further rise in daily activity leads to stabilization of the heart rate.**
+
+### c) "sleepDay_merged" file
+
+We summarized sleeping patterns by Id
+```{r}
+summary_sleep <- sleep_df %>%
+  group_by(Id) %>% 
+  summarize(average_asleep=mean(TotalMinutesAsleep),average_in_bed=mean(TotalTimeInBed))
+View(summary_sleep)
+```
+
+Combined information about heart rate and sleep pattern
+```{r}
+summary_min <- summary_heartrate %>% inner_join(summary_sleep, 
+                                            by="Id")
+View(summary_min)
+```
+
+We plotted minimal pulse and sleep minutes per day
+```{r,echo=FALSE}
+ggplot(data = summary_min)+
+  geom_smooth(mapping = aes(x = average_asleep, y = min))+
+  ggtitle("Relationship between minimumm pulse levels and minutes of sleep")+
+  labs(y = "bpm", x = "Minutes")
+```
+
+We plotted minimal pulse and minutes in bed per day
+```{r,echo=FALSE}
+ggplot(data = summary_min)+
+  geom_smooth(mapping = aes(x = average_in_bed, y = min))+
+  ggtitle("Relationship between minimumm pulse levels and minutes in bed")+
+  labs(y = "bpm", x = "Minutes")
+```
+
+**Based on above charts, the relationship between sleeping pattern and heart rate is not linear, but seems determined by sleeping phases. However charts illustrate that lowest heart rates occur indeed during deep sleep.**
+
+**Moreover, tracking extreme heart rates could help identify and send emergency alerts. For instance, a heart rate higher than 190 bmp even during intense workout or a heart rate below 60 outside the sleep phase would require to issue and alert to user for him/her to seek doctor's consultation.**
+
+## Recommendations
+
+Based on analysis performed, the following recommendations would be given to increase company's revenue:
+
+* Split Heartbeat's customers by level of activity (very active, active, light active and sedentary) and create separate marketing strategies for each type of customers. For instance, very active customers could receive advertising focused on additional features of Bellabeat app and Bellabeat subscription that would help them to improve their performance, while light active or sedentary customers could receive advertising focused on the importance of sport for well-being.
+
+* The timing of displaying adds can be set for days of maximal physical activity: Tuesday and Saturday. Sending adds on Friday and Sunday could be reduced to minimal levels as the majority of customers have lowest interest in sports and healthy lifestyle.
+
+* Based on analysis of calories per users, the tracking system of the competitor seems to have some drawbacks (i.e. computing calories when no movement is made, not track additional calories when further activity is performed). Focusing on key advantages of Heartbeat Leaf, Time and Heartbeat app in contrast to opponent's issues could have an important role in attracting new consumers.
+
+* In order to promote Bellabeat app, Bellabeat could share some catchy info such as: "Do you know that your heart beat could decline less than 40 bpm during sleep?". Also, Bellabeat could further consider the possibility to add alerts when heart beat reaches extremely low or high values. This additional feature could also be advertised as a specially designed customer care.
